@@ -1,0 +1,129 @@
+﻿<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exam Result - Study Buddies</title>
+<style>
+body { font-family: system-ui; background:#f4f6fb; margin:0; padding:20px; }
+.card { background:white; padding:20px; border-radius:12px; max-width:900px; margin:auto; box-shadow:0 6px 20px rgba(0,0,0,0.06); }
+.q { border:1px solid #eef2ff; margin-top:12px; padding:12px; border-radius:8px; }
+.correct { color:green; font-weight:bold; }
+.wrong { color:red; font-weight:bold; }
+.leaderboard { margin-top:20px; }
+table { width:100%; border-collapse:collapse; margin-top:10px; }
+th, td { border:1px solid #e2e8f0; padding:8px; text-align:center; }
+th { background:#f1f5f9; }
+.admin-btn { margin-top:20px; padding:8px 12px; border-radius:8px; border:1px solid #2563eb; color:#2563eb; background:transparent; cursor:pointer; }
+.download-btn { margin-left:10px; padding:8px 12px; border-radius:8px; border:1px solid #16a34a; color:#16a34a; background:transparent; cursor:pointer; }
+</style>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyBBqjtuJ50YrJQ7Mrf6M_MnwSdO96ici-k",
+  authDomain: "study-buddies-exam.firebaseapp.com",
+  projectId: "study-buddies-exam",
+  storageBucket: "study-buddies-exam.firebasestorage.app",
+  messagingSenderId: "1017595202024",
+  appId: "1:1017595202024:web:67568199ddfe235bca3c5d",
+  measurementId: "G-J2YJ12TB7Z"
+};
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const resDiv = document.getElementById('res');
+
+async function loadLatestResult(){
+  try{
+    // results collection ka latest document lao
+    const q = query(collection(db,"results"), orderBy("createdAt","desc"), limit(1));
+    const snap = await getDocs(q);
+    if(snap.empty){
+      resDiv.innerHTML = '<h3 style="color:red;">No result found in database.</h3>';
+      return;
+    }
+    const data = snap.docs[0].data();
+
+    // Show basic score
+    resDiv.innerHTML = `<h2>${data.name} (${data.email}) - Score: ${data.score}/${data.total}</h2>`;
+
+    // Agar questions bhi save kiye gaye the, toh answers dikhaye
+    if(data.questions && Array.isArray(data.questions)){
+      data.questions.forEach((q,i)=>{
+        const ans = data.answers[i];
+        const isCorrect = ans===3;
+        const selectedIndex = ans===3 || ans===2 ? ans===3 ? q.correct : -1 : null;
+
+        const qDiv = document.createElement('div');
+        qDiv.className = 'q';
+        qDiv.innerHTML = `
+          <b>Q${i+1}. ${q.question}</b><br>
+          Your Answer: ${
+            selectedIndex === null 
+              ? '<i>Not answered</i>'
+              : q.options[q.correct] /* we don't know which one user selected so we just show correct one */
+          } 
+          ${isCorrect ? '<span class="correct">✔</span>' : '<span class="wrong">✘</span>'}<br>
+          Correct Answer: ${q.options[q.correct]}
+        `;
+        resDiv.appendChild(qDiv);
+      });
+    }
+  }catch(err){
+    console.error(err);
+    resDiv.innerHTML='<h3 style="color:red;">Error loading result!</h3>';
+  }
+}
+
+loadLatestResult();
+
+// Admin Leaderboard
+document.getElementById('admin-view').onclick = async () => {
+  const pass = prompt("Enter Admin Password:");
+  if(pass!=="1234"){ alert("Wrong password!"); return; }
+
+  const snap = await getDocs(collection(db,"results"));
+  let html = '<h2>📊 All Students Results</h2>';
+  html += '<div class="leaderboard"><table>';
+  html += '<tr><th>#</th><th>Name</th><th>Email</th><th>Score</th><th>Total</th><th>Date</th></tr>';
+
+  const dataArr = [];
+  let i=1;
+  snap.forEach(doc=>{
+    const data = doc.data();
+    dataArr.push(data);
+    html += `<tr>
+      <td>${i++}</td>
+      <td>${data.name||''}</td>
+      <td>${data.email||''}</td>
+      <td>${data.score}</td>
+      <td>${data.total}</td>
+      <td>${new Date(data.createdAt?.seconds*1000||Date.now()).toLocaleString()}</td>
+    </tr>`;
+  });
+  html += '</table></div>';
+  html += `<button class="download-btn" onclick="downloadCSV()">⬇ Download CSV</button>`;
+  resDiv.innerHTML = html;
+
+  window.downloadCSV = ()=>{
+    let csv = "Name,Email,Score,Total,Date\n";
+    dataArr.forEach(d=>{
+      csv += `${d.name||''},${d.email||''},${d.score},${d.total},${new Date(d.createdAt?.seconds*1000||Date.now()).toLocaleString()}\n`;
+    });
+    const blob = new Blob([csv],{type:"text/csv"});
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "study_buddies_results.csv";
+    link.click();
+  }
+}
+</script>
+</head>
+<body>
+<div class="card" id="res"></div>
+<button class="admin-btn" id="admin-view">🔑 View All Results (Admin)</button>
+</body>
+</html>
